@@ -11,7 +11,7 @@ const paidOrderStore: Record<string, { phone: string; token: string; createdAt: 
 const usageStore: Record<string, { count: number; createdAt: number }> = {};
 
 /**
- * 记录小红书已付款订单手机号白名单
+ * 记录小红书已付款订单手机号白名单 (发货时触发)
  */
 export function registerPaidOrder(phone: string, token: string) {
   if (!phone) return;
@@ -55,7 +55,7 @@ export type VerifyResult = {
 };
 
 /**
- * 校验手机号、是否在付款白名单中、Token 防篡改、48小时过期时间及 2次使用上限
+ * 严格校验：只有发过货的已付款订单手机号或有效 Token 才能通过！
  */
 export function verifyToken(phone: string, token?: string): VerifyResult {
   if (!phone) {
@@ -64,26 +64,33 @@ export function verifyToken(phone: string, token?: string): VerifyResult {
 
   const cleanPhone = phone.trim();
 
-  // 1. 优先校验该手机号是否已在订单库中（防任意手机号未付款测试）
-  // 注：如果在控制台生成过发货凭证，或带着合法 Token，则视为已购买
-  const hasPaid = isPaidOrderPhone(cleanPhone);
-
-  if (!token && !hasPaid) {
+  // 核心拦截判断：如果这个手机号从来没有在店铺下过单/发过货，严厉拒绝拦截！
+  const paidRecord = paidOrderStore[cleanPhone];
+  if (!paidRecord) {
     return {
       valid: false,
-      reason: `未查询到手机号 (${cleanPhone}) 的小红书付款订单！请先从小红书店铺下单购买测评。`,
+      reason: `未查询到手机号 (${cleanPhone}) 的小红书付款订单！请先从小红书店铺购买测评。`,
     };
   }
 
-  // 2. 如果带有 Token，进行 Token 的 HMAC 和 48小时过期校验
-  if (token) {
+  // 校验 48 小时过期时效 (发货时间起 48 小时)
+  const now = Date.now();
+  const expireTimeMs = EXPIRE_HOURS * 60 * 60 * 1000;
+  if (now - paidRecord.createdAt > expireTimeMs) {
+    return {
+      valid: false,
+      reason: `该测评凭证已超过 ${EXPIRE_HOURS} 小时有效期限，已自动失效`,
+    };
+  }
+
+  // 如果传了 Token，进行签名防护校验
+  if (token && paidRecord.token && token !== paidRecord.token) {
+    // 进行签名校验
     const parts = token.split(".");
     if (parts.length === 2) {
       const [tsStr, hash] = parts;
       const timestamp = parseInt(tsStr, 10);
-
       if (!isNaN(timestamp)) {
-        // HMAC 校验
         const expectedHash = crypto
           .createHmac("sha256", SECRET_KEY)
           .update(`${cleanPhone}-${timestamp}`)
@@ -93,21 +100,11 @@ export function verifyToken(phone: string, token?: string): VerifyResult {
         if (hash.toLowerCase() !== expectedHash.toLowerCase()) {
           return { valid: false, reason: "凭证签名不匹配，已被非法篡改" };
         }
-
-        // 48 小时过期校验
-        const now = Date.now();
-        const expireTimeMs = EXPIRE_HOURS * 60 * 60 * 1000;
-        if (now - timestamp > expireTimeMs) {
-          return {
-            valid: false,
-            reason: `该测评凭证已超过 ${EXPIRE_HOURS} 小时有效期限，已自动失效`,
-          };
-        }
       }
     }
   }
 
-  // 3. 校验 2 次使用上限
+  // 校验 2 次使用上限
   return checkUsageCount(cleanPhone);
 }
 

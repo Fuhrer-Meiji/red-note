@@ -12,16 +12,18 @@ import {
   Badge,
   HStack,
   useToast,
+  Spinner,
 } from "@chakra-ui/react";
-import { FaMobileAlt, FaArrowRight, FaBrain, FaClock, FaCheckCircle, FaExclamationTriangle, FaLock } from "react-icons/fa";
+import { FaArrowRight, FaBrain, FaClock, FaCheckCircle, FaLock, FaSync } from "react-icons/fa";
 import MainLayout from "../../components/layouts/main-layout";
 import TestDisplay from "../../components/test/test-display";
-import { generateToken, verifyToken, VerifyResult, MAX_USAGE_COUNT } from "../../lib/token";
+import { MAX_USAGE_COUNT } from "../../lib/token";
 
 export default function TestPage() {
   const router = useRouter();
   const toast = useToast();
   const [phone, setPhone] = useState("");
+  const [loading, setLoading] = useState(false);
   const [isReadyToTest, setIsReadyToTest] = useState(false);
   const [activePhone, setActivePhone] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
@@ -34,20 +36,35 @@ export default function TestPage() {
     const urlToken = (router.query.token as string) || "";
 
     if (urlPhone) {
-      setActivePhone(urlPhone);
-      const tokenToVerify = urlToken || generateToken(urlPhone);
-      const verifyRes = verifyToken(urlPhone, tokenToVerify);
+      verifyPhoneAndToken(urlPhone, urlToken);
+    }
+  }, [router.isReady, router.query]);
 
-      if (verifyRes.valid) {
+  // 后端真实验证逻辑
+  const verifyPhoneAndToken = async (phoneToVerify: string, tokenToVerify?: string) => {
+    setLoading(true);
+    setAuthError(null);
+
+    try {
+      const res = await fetch(`/api/auth/verify?phone=${encodeURIComponent(phoneToVerify)}&token=${encodeURIComponent(tokenToVerify || "")}`);
+      const data = await res.json();
+
+      if (data.valid) {
+        setActivePhone(phoneToVerify);
         setIsReadyToTest(true);
-        setRemainingUses(verifyRes.remainingUses ?? MAX_USAGE_COUNT);
+        setRemainingUses(data.remainingUses ?? MAX_USAGE_COUNT);
         setAuthError(null);
       } else {
         setIsReadyToTest(false);
-        setAuthError(verifyRes.reason || "凭证已作废或失效");
+        setAuthError(data.message || data.reason || "未查询到小红书付款订单！");
       }
+    } catch (err: any) {
+      setIsReadyToTest(false);
+      setAuthError("验证网络连接失败，请刷新重试");
+    } finally {
+      setLoading(false);
     }
-  }, [router.isReady, router.query]);
+  };
 
   // 手动输入手机号校验进入
   const handleStartWithPhone = () => {
@@ -62,22 +79,22 @@ export default function TestPage() {
     }
 
     const cleanPhone = phone.trim();
-    const token = generateToken(cleanPhone);
-    const verifyRes = verifyToken(cleanPhone, token);
-
-    if (verifyRes.valid) {
-      setActivePhone(cleanPhone);
-      setIsReadyToTest(true);
-      setRemainingUses(verifyRes.remainingUses ?? MAX_USAGE_COUNT);
-      setAuthError(null);
-      router.replace(`/test?phone=${cleanPhone}&token=${token}`, undefined, { shallow: true });
-    } else {
-      setIsReadyToTest(false);
-      setAuthError(verifyRes.reason || "凭证已作废或超过 48 小时有效期");
-    }
+    verifyPhoneAndToken(cleanPhone);
   };
 
-  // 1. 已激活权限：渲染清爽的答题界面
+  // 加载状态中
+  if (loading) {
+    return (
+      <MainLayout>
+        <VStack justify="center" h="60vh" spacing={4}>
+          <Spinner size="xl" color="purple.500" thickness="4px" />
+          <Text color="gray.600" fontSize="sm">正在查询小红书订单核销凭证...</Text>
+        </VStack>
+      </MainLayout>
+    );
+  }
+
+  // 1. 已激活权限：渲染答题界面
   if (isReadyToTest) {
     return (
       <MainLayout>
@@ -85,7 +102,7 @@ export default function TestPage() {
           <HStack bg="purple.50" py={1.5} px={4} borderRadius="full" border="1px solid" borderColor="purple.200">
             <Icon as={FaCheckCircle} color="green.500" />
             <Text fontSize="xs" color="purple.800" fontWeight="bold">
-              凭证核销成功 (手机号: {activePhone} | 48小时内有效 | 剩余可用次数: {remainingUses}/{MAX_USAGE_COUNT})
+              小红书订单核销成功 (手机号: {activePhone} | 48小时有效 | 剩余可用次数: {remainingUses}/{MAX_USAGE_COUNT})
             </Text>
           </HStack>
           <TestDisplay />
@@ -94,7 +111,7 @@ export default function TestPage() {
     );
   }
 
-  // 2. 作废/超过48小时/次数用完拦截提示卡片
+  // 2. 拦截提示卡片（未付款手机号 / 已作废 / 超过48小时）
   if (authError) {
     return (
       <MainLayout>
@@ -113,7 +130,7 @@ export default function TestPage() {
             </Box>
 
             <Heading size="md" color="gray.800">
-              测评凭证已作废 / 失效
+              未检测到已付款订单 / 凭证已作废
             </Heading>
 
             <Box p={4} bg="red.50" borderRadius="xl" border="1px solid" borderColor="red.200" w="full">
@@ -123,20 +140,33 @@ export default function TestPage() {
             </Box>
 
             <Text fontSize="xs" color="gray.500">
-              提示：每份测评凭证最多允许测试 <b>2 次</b>，且需在下单后 <b>48 小时内</b>完成。
+              提示：必须是在小红书店铺真实下单的手机号才能开启测评。
             </Text>
 
-            <Button
-              colorScheme="purple"
-              size="lg"
-              w="full"
-              onClick={() => {
-                setAuthError(null);
-                router.replace("/test");
-              }}
-            >
-              更换手机号重新输入
-            </Button>
+            <VStack w="full" spacing={3}>
+              <Button
+                colorScheme="purple"
+                size="lg"
+                w="full"
+                leftIcon={<Icon as={FaSync} />}
+                onClick={() => {
+                  setAuthError(null);
+                  router.replace("/test");
+                }}
+              >
+                重新输入手机号
+              </Button>
+              <Button
+                as="a"
+                href="/admin/demo-fulfillment"
+                variant="outline"
+                colorScheme="purple"
+                size="md"
+                w="full"
+              >
+                🛠️ 商家控制台先给手机号模拟发货
+              </Button>
+            </VStack>
           </VStack>
         </Container>
       </MainLayout>
@@ -170,11 +200,11 @@ export default function TestPage() {
           <HStack justify="space-around" bg="purple.50" p={4} borderRadius="xl">
             <VStack spacing={1}>
               <Icon as={FaBrain} color="purple.500" boxSize={5} />
-              <Text fontSize="xs" fontWeight="bold" color="gray.700">70 道专业题目</Text>
+              <Text fontSize="xs" fontWeight="bold" color="gray.700">24 道精选题目</Text>
             </VStack>
             <VStack spacing={1}>
               <Icon as={FaClock} color="purple.500" boxSize={5} />
-              <Text fontSize="xs" fontWeight="bold" color="gray.700">48小时内有效(限2次)</Text>
+              <Text fontSize="xs" fontWeight="bold" color="gray.700">小红书已付款核销</Text>
             </VStack>
           </HStack>
 
@@ -187,7 +217,7 @@ export default function TestPage() {
                 size="lg"
                 type="tel"
                 maxLength={11}
-                placeholder="请输入 11 位手机号码"
+                placeholder="请输入小红书下单的 11 位手机号"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 focusBorderColor="purple.500"
@@ -202,18 +232,19 @@ export default function TestPage() {
                 borderRadius="xl"
                 fontSize="md"
                 fontWeight="bold"
+                isLoading={loading}
                 rightIcon={<Icon as={FaArrowRight} />}
                 onClick={handleStartWithPhone}
                 shadow="md"
                 _hover={{ transform: "translateY(-1px)", shadow: "lg" }}
               >
-                立即开始测试
+                核销订单并开始测试
               </Button>
             </VStack>
           </Box>
 
           <Text fontSize="xs" color="gray.400" textAlign="center">
-            🔒 每单凭证 48 小时内有效，最多允许测试 2 次
+            🔒 只有小红书已下单买家手机号可开启测评
           </Text>
         </VStack>
       </Container>
