@@ -28,10 +28,10 @@ export default function TestResultPage() {
       const phone = router.query.phone as string;
       const token = router.query.token as string;
 
-      const valid = verifyToken(phone, token);
-      setIsAuthorized(valid);
+      const verifyRes = verifyToken(phone, token);
+      setIsAuthorized(verifyRes.valid);
 
-      if (valid) {
+      if (verifyRes.valid) {
         setTestResult(AsyncData.Loading());
 
         const id = parseInt(router.query.testResultId as string);

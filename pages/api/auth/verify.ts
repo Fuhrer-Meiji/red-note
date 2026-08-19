@@ -1,9 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { verifyToken } from "../../../lib/token";
+import { verifyToken, incrementUsageCount, EXPIRE_HOURS, MAX_USAGE_COUNT } from "../../../lib/token";
 
 type Data = {
   valid: boolean;
   message?: string;
+  reason?: string;
+  remainingUses?: number;
+  usedCount?: number;
 };
 
 export default function handler(
@@ -16,6 +19,7 @@ export default function handler(
 
   const phone = (req.query.phone || req.body?.phone) as string;
   const token = (req.query.token || req.body?.token) as string;
+  const isConsume = req.query.consume === "true" || req.body?.consume === true;
 
   if (!phone || !token) {
     return res.status(200).json({
@@ -24,17 +28,28 @@ export default function handler(
     });
   }
 
-  const isValid = verifyToken(phone, token);
+  const result = verifyToken(phone, token);
 
-  if (isValid) {
-    return res.status(200).json({
-      valid: true,
-      message: "凭证校验成功",
-    });
-  } else {
+  if (!result.valid) {
     return res.status(200).json({
       valid: false,
-      message: "凭证无效或已被篡改，请从正确的短信链接打开",
+      message: result.reason || "凭证无效",
+      reason: result.reason,
+      remainingUses: result.remainingUses || 0,
+      usedCount: result.usedCount || 0,
     });
   }
+
+  // 如果请求带 consume=true，扣减一次可用次数
+  let currentUsedCount = result.usedCount || 0;
+  if (isConsume) {
+    currentUsedCount = incrementUsageCount(phone);
+  }
+
+  return res.status(200).json({
+    valid: true,
+    message: "凭证校验成功",
+    remainingUses: Math.max(0, MAX_USAGE_COUNT - currentUsedCount),
+    usedCount: currentUsedCount,
+  });
 }

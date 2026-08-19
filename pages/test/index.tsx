@@ -13,10 +13,10 @@ import {
   HStack,
   useToast,
 } from "@chakra-ui/react";
-import { FaMobileAlt, FaArrowRight, FaBrain, FaClock, FaCheckCircle } from "react-icons/fa";
+import { FaMobileAlt, FaArrowRight, FaBrain, FaClock, FaCheckCircle, FaExclamationTriangle, FaLock } from "react-icons/fa";
 import MainLayout from "../../components/layouts/main-layout";
 import TestDisplay from "../../components/test/test-display";
-import { generateToken } from "../../lib/token";
+import { generateToken, verifyToken, VerifyResult, MAX_USAGE_COUNT } from "../../lib/token";
 
 export default function TestPage() {
   const router = useRouter();
@@ -24,6 +24,8 @@ export default function TestPage() {
   const [phone, setPhone] = useState("");
   const [isReadyToTest, setIsReadyToTest] = useState(false);
   const [activePhone, setActivePhone] = useState("");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [remainingUses, setRemainingUses] = useState<number>(MAX_USAGE_COUNT);
 
   useEffect(() => {
     if (!router.isReady) return;
@@ -31,10 +33,19 @@ export default function TestPage() {
     const urlPhone = (router.query.phone as string) || "";
     const urlToken = (router.query.token as string) || "";
 
-    // 如果 URL 中携带了手机号，直接放行进入测试！
     if (urlPhone) {
       setActivePhone(urlPhone);
-      setIsReadyToTest(true);
+      const tokenToVerify = urlToken || generateToken(urlPhone);
+      const verifyRes = verifyToken(urlPhone, tokenToVerify);
+
+      if (verifyRes.valid) {
+        setIsReadyToTest(true);
+        setRemainingUses(verifyRes.remainingUses ?? MAX_USAGE_COUNT);
+        setAuthError(null);
+      } else {
+        setIsReadyToTest(false);
+        setAuthError(verifyRes.reason || "凭证已作废或失效");
+      }
     }
   }, [router.isReady, router.query]);
 
@@ -52,14 +63,21 @@ export default function TestPage() {
 
     const cleanPhone = phone.trim();
     const token = generateToken(cleanPhone);
-    setActivePhone(cleanPhone);
-    setIsReadyToTest(true);
+    const verifyRes = verifyToken(cleanPhone, token);
 
-    // 更新 URL，方便刷新保存状态
-    router.replace(`/test?phone=${cleanPhone}&token=${token}`, undefined, { shallow: true });
+    if (verifyRes.valid) {
+      setActivePhone(cleanPhone);
+      setIsReadyToTest(true);
+      setRemainingUses(verifyRes.remainingUses ?? MAX_USAGE_COUNT);
+      setAuthError(null);
+      router.replace(`/test?phone=${cleanPhone}&token=${token}`, undefined, { shallow: true });
+    } else {
+      setIsReadyToTest(false);
+      setAuthError(verifyRes.reason || "凭证已作废或超过 48 小时有效期");
+    }
   };
 
-  // 1. 已激活权限：直接渲染清爽的答题界面
+  // 1. 已激活权限：渲染清爽的答题界面
   if (isReadyToTest) {
     return (
       <MainLayout>
@@ -67,7 +85,7 @@ export default function TestPage() {
           <HStack bg="purple.50" py={1.5} px={4} borderRadius="full" border="1px solid" borderColor="purple.200">
             <Icon as={FaCheckCircle} color="green.500" />
             <Text fontSize="xs" color="purple.800" fontWeight="bold">
-              已验证买家凭证 (手机号: {activePhone})
+              凭证核销成功 (手机号: {activePhone} | 48小时内有效 | 剩余可用次数: {remainingUses}/{MAX_USAGE_COUNT})
             </Text>
           </HStack>
           <TestDisplay />
@@ -76,7 +94,56 @@ export default function TestPage() {
     );
   }
 
-  // 2. 未带参数时：呈现简约高颜值的手机号验证登录框，输入手机号即刻开始！
+  // 2. 作废/超过48小时/次数用完拦截提示卡片
+  if (authError) {
+    return (
+      <MainLayout>
+        <Container maxW="container.sm" py={{ base: 8, md: 12 }}>
+          <VStack
+            bg="white"
+            p={{ base: 6, md: 8 }}
+            borderRadius="2xl"
+            shadow="xl"
+            spacing={6}
+            align="center"
+            textAlign="center"
+          >
+            <Box p={4} bg="red.50" borderRadius="full" color="red.500">
+              <Icon as={FaLock} w={10} h={10} />
+            </Box>
+
+            <Heading size="md" color="gray.800">
+              测评凭证已作废 / 失效
+            </Heading>
+
+            <Box p={4} bg="red.50" borderRadius="xl" border="1px solid" borderColor="red.200" w="full">
+              <Text color="red.700" fontWeight="bold" fontSize="sm">
+                ❌ {authError}
+              </Text>
+            </Box>
+
+            <Text fontSize="xs" color="gray.500">
+              提示：每份测评凭证最多允许测试 <b>2 次</b>，且需在下单后 <b>48 小时内</b>完成。
+            </Text>
+
+            <Button
+              colorScheme="purple"
+              size="lg"
+              w="full"
+              onClick={() => {
+                setAuthError(null);
+                router.replace("/test");
+              }}
+            >
+              更换手机号重新输入
+            </Button>
+          </VStack>
+        </Container>
+      </MainLayout>
+    );
+  }
+
+  // 3. 默认输入手机号验证卡片
   return (
     <MainLayout>
       <Container maxW="container.sm" py={{ base: 6, md: 12 }}>
@@ -107,7 +174,7 @@ export default function TestPage() {
             </VStack>
             <VStack spacing={1}>
               <Icon as={FaClock} color="purple.500" boxSize={5} />
-              <Text fontSize="xs" fontWeight="bold" color="gray.700">约 3-5 分钟</Text>
+              <Text fontSize="xs" fontWeight="bold" color="gray.700">48小时内有效(限2次)</Text>
             </VStack>
           </HStack>
 
@@ -146,7 +213,7 @@ export default function TestPage() {
           </Box>
 
           <Text fontSize="xs" color="gray.400" textAlign="center">
-            🔒 凭证用于核销小红书订单及生成专属测试报告
+            🔒 每单凭证 48 小时内有效，最多允许测试 2 次
           </Text>
         </VStack>
       </Container>
