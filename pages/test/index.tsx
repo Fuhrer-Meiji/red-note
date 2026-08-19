@@ -156,16 +156,6 @@ export default function TestPage() {
               >
                 重新输入手机号
               </Button>
-              <Button
-                as="a"
-                href="/admin/demo-fulfillment"
-                variant="outline"
-                colorScheme="purple"
-                size="md"
-                w="full"
-              >
-                🛠️ 商家控制台先给手机号模拟发货
-              </Button>
             </VStack>
           </VStack>
         </Container>
