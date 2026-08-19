@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { generateToken } from "../../../lib/token";
+import { generateToken, registerPaidOrder } from "../../../lib/token";
 
 type ResponseData = {
   success: boolean;
@@ -31,6 +31,9 @@ export default async function handler(
 
     const cleanPhone = String(phone).trim();
     const token = generateToken(cleanPhone);
+
+    // 登记手机号到已付款白名单中
+    registerPaidOrder(cleanPhone, token);
 
     // 获取动态主机地址，优先取 customOrigin / referer / origin
     let origin = req.body.customOrigin;
