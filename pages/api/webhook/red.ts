@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { addPaidOrder } from "../../../lib/db";
 import { generateToken } from "../../../lib/token";
 
 type ResponseData = {
@@ -30,9 +31,14 @@ export default async function handler(
     }
 
     const cleanPhone = String(phone).trim();
-    const token = generateToken(cleanPhone);
+    
+    // 1. 将买家手机号写入已付款订单白名单数据库！
+    const orderRecord = addPaidOrder(cleanPhone);
 
-    // 获取动态主机地址，优先取 customOrigin / referer / origin
+    // 2. 生成安全验证凭证
+    const token = generateToken(cleanPhone, orderRecord.createdAt);
+
+    // 3. 获取动态主机地址
     let origin = req.body.customOrigin;
     if (!origin && req.headers.referer) {
       try {
@@ -45,20 +51,17 @@ export default async function handler(
       origin = `http://${host}`;
     }
 
-    // 局域网 IP (192.168.x.x / 10.x.x / 127.0.0.1 / localhost) 强制使用 http 协议
-    if (origin.startsWith("https://") && (origin.includes("192.168.") || origin.includes("127.0.0.1") || origin.includes("localhost") || origin.includes("10."))) {
+    if (origin.startsWith("https://") && (origin.includes("192.168.") || origin.includes("127.0.0.1") || origin.includes("localhost"))) {
       origin = origin.replace("https://", "http://");
     }
 
     const quizLink = `${origin}/test?phone=${cleanPhone}&token=${token}`;
 
-    // 模拟调用 SMS 短信发送
-    console.log(`[小红书订单自动发货] 订单号:${orderId || "模拟订单"} 手机号:${cleanPhone}`);
-    console.log(`[小红书订单自动发货] 下发短信专属链接: ${quizLink}`);
+    console.log(`[小红书订单自动发货成功] 手机号:${cleanPhone} 已入库白名单。链接: ${quizLink}`);
 
     return res.status(200).json({
       success: true,
-      message: "发货处理成功，短信凭证已下发！",
+      message: "发货成功，买家手机号已写入白名单，短信凭证已下发！",
       data: {
         orderId: orderId || `DEMO_${Date.now()}`,
         phone: cleanPhone,

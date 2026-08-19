@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { verifyToken, incrementUsageCount, EXPIRE_HOURS, MAX_USAGE_COUNT } from "../../../lib/token";
+import { checkPaidOrder, consumeOrderUse, EXPIRE_HOURS, MAX_USAGE_COUNT } from "../../../lib/db";
 
 type Data = {
   valid: boolean;
@@ -18,38 +18,38 @@ export default function handler(
   }
 
   const phone = (req.query.phone || req.body?.phone) as string;
-  const token = (req.query.token || req.body?.token) as string;
   const isConsume = req.query.consume === "true" || req.body?.consume === true;
 
-  if (!phone || !token) {
+  if (!phone) {
     return res.status(200).json({
       valid: false,
-      message: "缺少手机号或验证凭证 Token",
+      message: "请输入在小红书下单的手机号",
     });
   }
 
-  const result = verifyToken(phone, token);
+  // 1. 查询数据库白名单状态
+  const checkResult = checkPaidOrder(phone);
 
-  if (!result.valid) {
+  if (!checkResult.valid) {
     return res.status(200).json({
       valid: false,
-      message: result.reason || "凭证无效",
-      reason: result.reason,
-      remainingUses: result.remainingUses || 0,
-      usedCount: result.usedCount || 0,
+      message: checkResult.reason || "校验未通过",
+      reason: checkResult.reason,
+      remainingUses: checkResult.remainingUses || 0,
+      usedCount: checkResult.usedCount || 0,
     });
   }
 
-  // 如果请求带 consume=true，扣减一次可用次数
-  let currentUsedCount = result.usedCount || 0;
+  // 2. 如果页面指定扣减次数
+  let usedCount = checkResult.usedCount || 0;
   if (isConsume) {
-    currentUsedCount = incrementUsageCount(phone);
+    usedCount = consumeOrderUse(phone);
   }
 
   return res.status(200).json({
     valid: true,
-    message: "凭证校验成功",
-    remainingUses: Math.max(0, MAX_USAGE_COUNT - currentUsedCount),
-    usedCount: currentUsedCount,
+    message: "订单白名单核销成功",
+    remainingUses: Math.max(0, MAX_USAGE_COUNT - usedCount),
+    usedCount,
   });
 }
