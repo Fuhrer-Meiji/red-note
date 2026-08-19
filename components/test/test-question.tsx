@@ -85,7 +85,10 @@ export default function TestQuestion() {
         setUserTestAnswers([]);
       })
       .tapOk((id) => {
-        router.replace(`/test/result/?testResultId=${id}`);
+        const phone = (router.query.phone as string) || "";
+        const token = (router.query.token as string) || "";
+        const queryStr = phone && token ? `&phone=${encodeURIComponent(phone)}&token=${encodeURIComponent(token)}` : "";
+        router.replace(`/test/result/?testResultId=${id}${queryStr}`);
       })
       .tapError((error) => {
         console.error(error);
