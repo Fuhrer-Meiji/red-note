@@ -36,6 +36,10 @@ export default function TestPage() {
     const urlToken = (router.query.token as string) || "";
 
     if (urlPhone) {
+      // 保存本地凭证
+      if (urlToken && typeof window !== "undefined") {
+        localStorage.setItem(`mbti_token_${urlPhone.trim()}`, urlToken);
+      }
       verifyPhoneAndToken(urlPhone, urlToken);
     }
   }, [router.isReady, router.query]);
@@ -45,12 +49,20 @@ export default function TestPage() {
     setLoading(true);
     setAuthError(null);
 
+    const cleanPhone = phoneToVerify.trim();
+    let token = tokenToVerify;
+
+    // 如果未传 token，尝试从本地读取曾经通过专属链接发放的 token
+    if (!token && typeof window !== "undefined") {
+      token = localStorage.getItem(`mbti_token_${cleanPhone}`) || "";
+    }
+
     try {
-      const res = await fetch(`/api/auth/verify?phone=${encodeURIComponent(phoneToVerify)}&token=${encodeURIComponent(tokenToVerify || "")}`);
+      const res = await fetch(`/api/auth/verify?phone=${encodeURIComponent(cleanPhone)}&token=${encodeURIComponent(token || "")}`);
       const data = await res.json();
 
       if (data.valid) {
-        setActivePhone(phoneToVerify);
+        setActivePhone(cleanPhone);
         setIsReadyToTest(true);
         setRemainingUses(data.remainingUses ?? MAX_USAGE_COUNT);
         setAuthError(null);
@@ -102,7 +114,7 @@ export default function TestPage() {
           <HStack bg="purple.50" py={1.5} px={4} borderRadius="full" border="1px solid" borderColor="purple.200">
             <Icon as={FaCheckCircle} color="green.500" />
             <Text fontSize="xs" color="purple.800" fontWeight="bold">
-              小红书订单核销成功 (手机号: {activePhone} | 48小时有效 | 剩余可用次数: {remainingUses}/{MAX_USAGE_COUNT})
+              订单核销成功 (手机号: {activePhone} | 48小时有效 | 可用次数: {remainingUses}/{MAX_USAGE_COUNT})
             </Text>
           </HStack>
           <TestDisplay />
@@ -111,7 +123,7 @@ export default function TestPage() {
     );
   }
 
-  // 2. 拦截提示卡片（未付款手机号 / 已作废 / 超过48小时）
+  // 2. 拦截提示卡片
   if (authError) {
     return (
       <MainLayout>
@@ -130,7 +142,7 @@ export default function TestPage() {
             </Box>
 
             <Heading size="md" color="gray.800">
-              未检测到已付款订单 / 凭证已作废
+              未检测到已付款订单 / 凭证失效
             </Heading>
 
             <Box p={4} bg="red.50" borderRadius="xl" border="1px solid" borderColor="red.200" w="full">
@@ -140,7 +152,7 @@ export default function TestPage() {
             </Box>
 
             <Text fontSize="xs" color="gray.500">
-              提示：必须是在小红书店铺真实下单的手机号才能开启测评。
+              提示：必须通过小红书发货短信中的专属链接点开，才能开启测评。
             </Text>
 
             <VStack w="full" spacing={3}>
@@ -183,7 +195,7 @@ export default function TestPage() {
               16 型人格深度测评
             </Heading>
             <Text color="gray.500" fontSize="sm">
-              只需 5 分钟，解锁你的性格特征、高匹配恋爱与适合职业
+              解锁你的性格特征、高匹配恋爱与适合职业
             </Text>
           </VStack>
 
@@ -194,7 +206,7 @@ export default function TestPage() {
             </VStack>
             <VStack spacing={1}>
               <Icon as={FaClock} color="purple.500" boxSize={5} />
-              <Text fontSize="xs" fontWeight="bold" color="gray.700">小红书已付款核销</Text>
+              <Text fontSize="xs" fontWeight="bold" color="gray.700">短信专属链接测试</Text>
             </VStack>
           </HStack>
 
@@ -234,7 +246,7 @@ export default function TestPage() {
           </Box>
 
           <Text fontSize="xs" color="gray.400" textAlign="center">
-            🔒 只有小红书已下单买家手机号可开启测评
+            🔒 请从短信中的专属链接打开或输入已被发货的手机号
           </Text>
         </VStack>
       </Container>
