@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Heading, Text, Highlight, Flex, Button } from "@chakra-ui/react";
+import { Heading, Text, Highlight, Flex, Button, Badge, VStack } from "@chakra-ui/react";
 import { FiArrowRight } from "react-icons/fi";
 import Image from "next/image";
 
@@ -17,46 +17,56 @@ export default function HomePage() {
           }}
           alignSelf="center"
           px={4}
-          pt={20}
-          gap={8}
+          pt={16}
+          gap={6}
           h="calc(100vh - 80px)"
           direction="column"
           justifyContent="flex-start"
           alignItems="center"
           zIndex={1}
         >
+          <Badge colorScheme="purple" px={4} py={1} borderRadius="full" fontSize="xs">
+            🔥 小红书爆款 · 恋爱与社交人格测评
+          </Badge>
           <Heading
             as="h1"
             lineHeight="tall"
             textAlign="center"
+            size="xl"
           >
             <Highlight
-              query="MBTI"
+              query="恋爱人格"
               styles={{
                 py: 1,
                 px: 4,
                 rounded: "full",
-                bg: "primary.500",
+                bg: "purple.500",
                 color: "white",
               }}
             >
-              参加 MBTI 性格测试 
+              测测你的 恋爱人格 与动物类型
             </Highlight>
           </Heading>
           <Text
-            fontSize="xl"
+            fontSize="md"
             align="center"
+            color="gray.600"
           >
-            通过这个性格测试更好地了解自己
+            你是黑豹系、金毛系、灵猫系还是狐狸系恋人？
+            <br />
+            只需 3 分钟，解锁你的恋爱潜意识与绝配 CP！
           </Text>
           <Link href="/test">
             <Button
               w="min-content"
-              colorScheme="primary"
-              variant="solid"
+              colorScheme="purple"
+              size="lg"
+              borderRadius="xl"
+              px={8}
+              shadow="md"
               rightIcon={<FiArrowRight size={20} />}
             >
-              开始测试
+              立即开始测试
             </Button>
           </Link>
         </Flex>

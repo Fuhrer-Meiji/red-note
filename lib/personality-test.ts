@@ -1,7 +1,7 @@
 import { openDB } from "idb";
 import { Option, Future, Result } from "@swan-io/boxed";
 import { personalityTest } from "../data/personality-test";
-import { personalityClassGroup } from "../data/personality-class-groups";
+import { personalityClassGroups } from "../data/personality-class-groups";
 
 export interface TestQuestion {
   no: number;
@@ -33,27 +33,31 @@ export interface PersonalityClassGroup {
     | Thinking
     | Feeling}${Perceiving | Judging}`;
   name: string;
-  nameDescription: string;
-  epithet: string;
   description: string;
-  jungianFunctionalPreference: {
+  groupName?: string;
+  nameDescription?: string;
+  epithet?: string;
+  jungianFunctionalPreference?: {
     dominant: string;
     auxiliary: string;
     tertiary: string;
     inferior: string;
   };
-  generalTraits: string[];
-  relationshipStrengths: string[];
-  relationshipWeaknesses: string[];
-  successDefinition: string;
-  strengths: string[];
-  gifts: string[];
-  potentialProblemAreas: string[];
-  explanationOfProblems: string;
-  solutions: string;
-  livingHappilyTips: string;
+  generalTraits?: string[];
+  relationshipStrengths?: string[];
+  relationshipWeaknesses?: string[];
+  successDefinition?: string;
+  strengths?: string[];
+  gifts?: string[];
+  potentialProblemAreas?: string[];
+  explanationOfProblems?: string;
+  solutions?: string;
+  livingHappilyTips?: string;
   suggestions?: string[];
-  tenRulesToLive: string[];
+  tenRulesToLive?: string[];
+  traits?: string[];
+  weaknesses?: string[];
+  careerSuggestions?: string[];
 }
 
 export interface TestResult {
@@ -141,7 +145,7 @@ export function getPersonalityClassGroupByTestScores(
     scoreCount.T >= scoreCount.F ? "T" : "F"
   }${scoreCount.J >= scoreCount.P ? "J" : "P"}`;
 
-  return personalityClassGroup.find(
+  return personalityClassGroups.find(
     ({ type }) => personalityClassGroupType === type
   )!;
 }
